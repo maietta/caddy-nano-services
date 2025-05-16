@@ -10,7 +10,7 @@ interface Instance {
 class UnikernelManager extends EventEmitter {
     private instances: Map<string, Instance> = new Map();
     private readonly IDLE_TIMEOUT = 5000; // 5 seconds
-    private readonly BASE_PORT = 8083;
+    private readonly PORT = 8083; // Fixed port for all instances
 
     constructor() {
         super();
@@ -21,15 +21,19 @@ class UnikernelManager extends EventEmitter {
         return this.instances.has(hostname);
     }
 
-    getInstancePort(hostname: string): number | undefined {
-        return this.instances.get(hostname)?.port;
+    getInstancePort(hostname: string): number {
+        return this.PORT;
     }
 
     async startInstance(hostname: string): Promise<number> {
-        const port = this.getNextAvailablePort();
+        // Check if any instance is already running on the port
+        if (this.instances.size > 0) {
+            throw new Error('An instance is already running on port 8083');
+        }
+
         const instance = spawn('ops', [
             'pkg', 'load', 'eyberg/node:v14.2.0',
-            '-p', port.toString(),
+            '-p', this.PORT.toString(),
             '-n',
             '-a', 'hi.js'
         ]);
@@ -37,7 +41,7 @@ class UnikernelManager extends EventEmitter {
         const newInstance: Instance = {
             process: instance,
             lastActive: Date.now(),
-            port
+            port: this.PORT
         };
 
         this.instances.set(hostname, newInstance);
@@ -56,16 +60,7 @@ class UnikernelManager extends EventEmitter {
             this.instances.delete(hostname);
         });
 
-        return port;
-    }
-
-    private getNextAvailablePort(): number {
-        const usedPorts = Array.from(this.instances.values()).map(i => i.port);
-        let port = this.BASE_PORT;
-        while (usedPorts.includes(port)) {
-            port++;
-        }
-        return port;
+        return this.PORT;
     }
 
     updateActivity(hostname: string) {
